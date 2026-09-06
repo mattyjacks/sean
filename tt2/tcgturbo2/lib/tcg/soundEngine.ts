@@ -335,6 +335,37 @@ class SoundEngine {
       });
     } catch {}
   }
+
+  // Buff / Heal / Rewind celestial chime
+  public playBuff() {
+    this.init();
+    this.resume();
+    if (!this.ctx || !this.masterGain || this.isMuted) return;
+
+    try {
+      const now = this.ctx.currentTime;
+      const freqs = [329.63, 440, 554.37, 659.25]; // E4, A4, C#5, E5
+      freqs.forEach((freq, idx) => {
+        if (!this.ctx || !this.masterGain) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const startTime = now + idx * 0.05;
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, startTime);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.25, startTime + 0.25);
+
+        gain.gain.setValueAtTime(0.12, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.3);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+
+        osc.start(startTime);
+        osc.stop(startTime + 0.3);
+      });
+    } catch {}
+  }
 }
 
 export const soundEngine = new SoundEngine();

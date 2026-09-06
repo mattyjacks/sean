@@ -5,11 +5,13 @@ import Link from 'next/link';
 import { GAME_TITLES } from '@/lib/tcg/titlesData';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 import { getSupporterTier } from '@/lib/tcg/collectionEngine';
-import { Volume2, VolumeX, Maximize, Swords, BookOpen, Layers, Sparkles, User } from 'lucide-react';
+import { Volume2, VolumeX, Maximize, Swords, BookOpen, Layers, Sparkles, User, Gamepad2, Wand2 } from 'lucide-react';
+
+export type MainNavTab = 'battle' | 'deckbuilder' | 'almanac' | 'lore' | 'arcade' | 'outfitter';
 
 interface HeaderProps {
-  activeTab: 'battle' | 'deckbuilder' | 'almanac' | 'lore';
-  setActiveTab: (tab: 'battle' | 'deckbuilder' | 'almanac' | 'lore') => void;
+  activeTab: MainNavTab;
+  setActiveTab: (tab: MainNavTab) => void;
   gameTitle: string;
   setGameTitle: (title: string) => void;
   isMuted: boolean;
@@ -128,6 +130,36 @@ export function Header({
         >
           <BookOpen className="w-3.5 h-3.5 text-amber-300" />
           <span>Rules & Lore</span>
+        </button>
+
+        <button
+          className={`nav-tab-btn px-2.5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+            activeTab === 'arcade'
+              ? 'bg-gradient-to-r from-blue-600/50 to-indigo-600/50 text-sky-200 border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+          }`}
+          onClick={() => {
+            setActiveTab('arcade');
+            soundEngine.playHover();
+          }}
+        >
+          <Gamepad2 className="w-3.5 h-3.5 text-rose-400" />
+          <span>🎮 Arcade Hub</span>
+        </button>
+
+        <button
+          className={`nav-tab-btn px-2.5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+            activeTab === 'outfitter'
+              ? 'bg-gradient-to-r from-blue-600/50 to-indigo-600/50 text-sky-200 border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+          }`}
+          onClick={() => {
+            setActiveTab('outfitter');
+            soundEngine.playHover();
+          }}
+        >
+          <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+          <span>🛠️ Outfitter</span>
         </button>
       </nav>
 

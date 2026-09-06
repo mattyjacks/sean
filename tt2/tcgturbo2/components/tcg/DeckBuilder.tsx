@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card } from './Card';
 import { CARDS_DATA } from '@/lib/tcg/cardsData';
 import { PRESET_DECKS } from '@/lib/tcg/presetDecks';
 import { CardDef, CardInstance } from '@/lib/tcg/types';
 import { soundEngine } from '@/lib/tcg/soundEngine';
+import { tcgWorkerManager } from '@/lib/tcg/tcgWorkerManager';
 import { Search, Plus, Trash2, Swords, CheckCircle2 } from 'lucide-react';
 
 interface DeckBuilderProps {
@@ -57,8 +58,28 @@ export function DeckBuilder({
     return counts;
   }, [currentDeck]);
 
-  // Mana Curve histogram calculations (1 to 7+)
-  const manaCurve = useMemo(() => {
+  // Mana Curve histogram calculations (1 to 7+) with instant local memo and worker sync
+  const [workerCurve, setWorkerCurve] = useState<number[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    tcgWorkerManager
+      .runTask<{ curve: number[] }>('EVALUATE_MANA_CURVE', {
+        deckCards: currentDeck,
+        cardCatalog: CARDS_DATA
+      })
+      .then(res => {
+        if (active && res.success && res.data?.curve) {
+          setWorkerCurve(res.data.curve);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [currentDeck]);
+
+  const fallbackCurve = useMemo(() => {
     const curve = [0, 0, 0, 0, 0, 0, 0]; // 1, 2, 3, 4, 5, 6, 7+
     currentDeck.forEach(id => {
       const def = CARDS_DATA.find(c => c.id === id);
@@ -70,6 +91,7 @@ export function DeckBuilder({
     return curve;
   }, [currentDeck]);
 
+  const manaCurve = workerCurve || fallbackCurve;
   const maxCurveCount = Math.max(1, ...manaCurve);
 
   // Add card to deck

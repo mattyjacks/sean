@@ -3,6 +3,7 @@ import {
   createInitialGame,
   dispatchGameAction,
   endTurn,
+  drawCardTurn,
   playCard,
   declareAttack,
   activateHeroPower,
@@ -266,10 +267,24 @@ export function runServerAiTurn(state: GameState): GameState {
 
   let s = state;
 
+  // Phase 0: Draw Phase
+  if (s.phase === 'draw') {
+    s = drawCardTurn(s, false);
+  }
+
   // Phase 1: In-place Evolution & Creature Summons & Spells
   for (let iter = 0; iter < 5; iter++) {
     const ai = s.players[1];
     let actionTaken = false;
+
+    // 0. Dedicated Champion Lane Summon
+    if (ai.championLane === null) {
+      const champCard = ai.hand.find(c => c.id.includes('_champion') || c.desc?.includes('Dedicated Champion Lane'));
+      if (champCard && champCard.cost <= ai.mana) {
+        s = playCard(s, champCard.instanceId, 'champion');
+        continue;
+      }
+    }
 
     // 1. In-place Evolution
     for (let laneIdx = 0; laneIdx < ai.board.length; laneIdx++) {
@@ -323,9 +338,14 @@ export function runServerAiTurn(state: GameState): GameState {
   }
 
   // Phase 3: Attacks
-  const readyAttackers = s.players[1].board.filter(
+  const boardAttackers = s.players[1].board.filter(
     (c): c is CardInstance => !!c && c.canAttack && !c.hasAttackedThisTurn && !c.frozen
   );
+  const champLaneAttacker = s.players[1].championLane;
+  const readyAttackers: CardInstance[] = [...boardAttackers];
+  if (champLaneAttacker && champLaneAttacker.canAttack && !champLaneAttacker.hasAttackedThisTurn && !champLaneAttacker.frozen) {
+    readyAttackers.push(champLaneAttacker);
+  }
 
   for (const att of readyAttackers) {
     if (s.winner || s.currentTurn !== 2) break;

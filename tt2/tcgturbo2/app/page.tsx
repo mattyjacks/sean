@@ -6,10 +6,13 @@ import { LandingHomepage } from '@/components/tcg/LandingHomepage';
 import { DeckBuilder } from '@/components/tcg/DeckBuilder';
 import { CardAlmanac } from '@/components/tcg/CardAlmanac';
 import { RulesCodex } from '@/components/tcg/RulesCodex';
+import { ArcadeHub } from '@/components/arcade/ArcadeHub';
+import { CardOutfitterStudio } from '@/components/tcg/CardOutfitterStudio';
 import { CardInspectorModal } from '@/components/tcg/CardInspectorModal';
 import { AmbientBackground } from '@/components/tcg/AmbientBackground';
 import { GAME_TITLES } from '@/lib/tcg/titlesData';
 import { CardDef, CardInstance } from '@/lib/tcg/types';
+import { MainNavTab } from '@/components/tcg/Header';
 
 import { PackOpenerModal } from '@/components/tcg/PackOpenerModal';
 import { TradeModal } from '@/components/tcg/TradeModal';
@@ -23,7 +26,7 @@ import {
 } from '@/lib/tcg/collectionEngine';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'battle' | 'deckbuilder' | 'almanac' | 'lore'>('battle');
+  const [activeTab, setActiveTab] = useState<MainNavTab>('battle');
   const [gameTitle, setGameTitle] = useState<string>(GAME_TITLES[0]);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [inspectedCard, setInspectedCard] = useState<CardDef | CardInstance | null>(null);
@@ -90,6 +93,27 @@ export default function Home() {
         )}
 
         {activeTab === 'lore' && <RulesCodex />}
+
+        {activeTab === 'arcade' && (
+          <ArcadeHub
+            onLaunchGame={gameId => {
+              if (gameId === 'tcg_turbo') {
+                setActiveTab('battle');
+              }
+            }}
+          />
+        )}
+
+        {activeTab === 'outfitter' && (
+          <CardOutfitterStudio
+            onInspectCard={card => setInspectedCard(card)}
+            onTestCardInBattle={() => {
+              if (typeof window !== 'undefined') {
+                window.location.href = '/battle/splitscreen';
+              }
+            }}
+          />
+        )}
       </main>
 
       {/* Card Inspector Modal */}

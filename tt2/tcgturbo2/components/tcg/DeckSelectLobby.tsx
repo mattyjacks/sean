@@ -12,7 +12,9 @@ import {
   Unlock,
   Sparkles,
   ArrowLeft,
-  Crown
+  Crown,
+  Bot,
+  Users
 } from 'lucide-react';
 
 interface DeckSelectLobbyProps {
@@ -24,6 +26,7 @@ interface DeckSelectLobbyProps {
     privacyCurtain: boolean;
     customP1Cards?: string[];
     customP2Cards?: string[];
+    isP2AI?: boolean;
   }) => void;
   onBackToMenu?: () => void;
   savedCustomP1Deck?: string[];
@@ -36,11 +39,12 @@ export function DeckSelectLobby({
   savedCustomP1Deck,
   savedCustomP2Deck
 }: DeckSelectLobbyProps) {
+  const [isP2AI, setIsP2AI] = useState<boolean>(true);
   const [p1Name, setP1Name] = useState<string>('Player 1');
-  const [p2Name, setP2Name] = useState<string>('Player 2');
+  const [p2Name, setP2Name] = useState<string>('AI Tactician');
   const [p1DeckKey, setP1DeckKey] = useState<string>('solar_pyre');
   const [p2DeckKey, setP2DeckKey] = useState<string>('void_shadow');
-  const [privacyCurtain, setPrivacyCurtain] = useState<boolean>(true);
+  const [privacyCurtain, setPrivacyCurtain] = useState<boolean>(false);
 
   // Preset deck options
   const deckKeys = Object.keys(PRESET_DECKS);
@@ -79,10 +83,11 @@ export function DeckSelectLobby({
       p1DeckKey,
       p2DeckKey,
       p1Name: p1Name.trim() || 'Player 1',
-      p2Name: p2Name.trim() || 'Player 2',
-      privacyCurtain,
+      p2Name: p2Name.trim() || (isP2AI ? 'AI Tactician' : 'Player 2'),
+      privacyCurtain: isP2AI ? false : privacyCurtain,
       customP1Cards: p1DeckKey === 'custom' ? savedCustomP1Deck : undefined,
-      customP2Cards: p2DeckKey === 'custom' ? savedCustomP2Deck : undefined
+      customP2Cards: p2DeckKey === 'custom' ? savedCustomP2Deck : undefined,
+      isP2AI
     });
   };
 
@@ -104,7 +109,7 @@ export function DeckSelectLobby({
           <div>
             <div className="flex items-center gap-2 font-mono text-xs text-amber-400 font-bold uppercase tracking-wider">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Local Couch Co-Op Setup</span>
+              <span>Combat Chamber Configuration</span>
             </div>
             <h1 className="text-2xl md:text-3xl font-black font-serif text-white">
               Choose Your Champions & Combat Decks
@@ -112,23 +117,66 @@ export function DeckSelectLobby({
           </div>
         </div>
 
-        {/* Privacy Curtain Toggle */}
-        <div className="flex items-center gap-3 bg-slate-950/80 border border-slate-800 p-2 rounded-xl">
-          <button
-            type="button"
-            onClick={() => {
-              soundEngine.playHover();
-              setPrivacyCurtain(!privacyCurtain);
-            }}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
-              privacyCurtain
-                ? 'bg-purple-900/70 border border-purple-500/60 text-purple-200'
-                : 'bg-slate-800 text-slate-400'
-            }`}
-          >
-            {privacyCurtain ? <Lock className="w-3.5 h-3.5 text-purple-400" /> : <Unlock className="w-3.5 h-3.5" />}
-            <span>Privacy Shield Curtain: {privacyCurtain ? 'ACTIVE' : 'OFF'}</span>
-          </button>
+        {/* Game Mode & Privacy Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Mode Selector */}
+          <div className="flex items-center bg-slate-950/80 border border-slate-800 p-1 rounded-xl gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playHover();
+                setIsP2AI(true);
+                setP2Name('AI Tactician');
+                setPrivacyCurtain(false);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
+                isP2AI
+                  ? 'bg-sky-600 text-white shadow-[0_0_10px_rgba(2,132,199,0.5)]'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Bot className="w-3.5 h-3.5" />
+              <span>Solo vs AI</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playHover();
+                setIsP2AI(false);
+                setP2Name('Player 2');
+                setPrivacyCurtain(true);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
+                !isP2AI
+                  ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(147,51,234,0.5)]'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Pass & Play 2P</span>
+            </button>
+          </div>
+
+          {/* Privacy Curtain Toggle (only relevant in Pass & Play 2P) */}
+          {!isP2AI && (
+            <div className="flex items-center bg-slate-950/80 border border-slate-800 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playHover();
+                  setPrivacyCurtain(!privacyCurtain);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
+                  privacyCurtain
+                    ? 'bg-purple-900/70 border border-purple-500/60 text-purple-200'
+                    : 'bg-slate-800 text-slate-400'
+                }`}
+              >
+                {privacyCurtain ? <Lock className="w-3.5 h-3.5 text-purple-400" /> : <Unlock className="w-3.5 h-3.5" />}
+                <span>Privacy Shield: {privacyCurtain ? 'ON' : 'OFF'}</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

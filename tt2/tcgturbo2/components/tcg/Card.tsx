@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { CardDef, CardInstance } from '@/lib/tcg/types';
 import { soundEngine } from '@/lib/tcg/soundEngine';
@@ -24,9 +24,10 @@ interface CardProps {
   equippedCardBack?: string;
   equippedFoilStyle?: string;
   isPlayable?: boolean;
+  isExhausted?: boolean;
 }
 
-export function Card({
+function CardBase({
   card,
   isFaceDown = false,
   isReadyToAttack = false,
@@ -34,6 +35,7 @@ export function Card({
   isValidTarget = false,
   isAscensionCandidate = false,
   isPlayable = false,
+  isExhausted = false,
   onClick,
   onDoubleClick,
   onContextMenu,
@@ -47,15 +49,10 @@ export function Card({
   equippedFoilStyle = 'foil_style_default'
 }: CardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const [rx, setRx] = useState(0);
-  const [ry, setRy] = useState(0);
-  const [px, setPx] = useState(50);
-  const [py, setPy] = useState(50);
-  const [opacity, setOpacity] = useState(0);
-
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current || isFaceDown) return;
-    const rect = cardRef.current.getBoundingClientRect();
+    const el = cardRef.current;
+    const rect = el.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
@@ -65,17 +62,19 @@ export function Card({
     const rotX = ((y - rect.height / 2) / (rect.height / 2)) * -14;
     const rotY = ((x - rect.width / 2) / (rect.width / 2)) * 14;
 
-    setPx(pointerX);
-    setPy(pointerY);
-    setRx(rotX);
-    setRy(rotY);
-    setOpacity(1);
+    el.style.setProperty('--pointer-x', `${pointerX.toFixed(1)}%`);
+    el.style.setProperty('--pointer-y', `${pointerY.toFixed(1)}%`);
+    el.style.setProperty('--card-rx', `${rotX.toFixed(2)}deg`);
+    el.style.setProperty('--card-ry', `${rotY.toFixed(2)}deg`);
+    el.style.setProperty('--card-opacity', '1');
   }, [isFaceDown]);
 
   const handleMouseLeave = useCallback(() => {
-    setRx(0);
-    setRy(0);
-    setOpacity(0);
+    if (cardRef.current) {
+      cardRef.current.style.setProperty('--card-rx', '0deg');
+      cardRef.current.style.setProperty('--card-ry', '0deg');
+      cardRef.current.style.setProperty('--card-opacity', '0');
+    }
   }, []);
 
   const handleMouseEnter = useCallback(() => {
@@ -130,7 +129,7 @@ export function Card({
           isSelectedAttacker ? 'active-attacker' : ''
         } ${isValidTarget ? 'valid-target' : ''} ${
           isAscensionCandidate ? 'ascension-candidate' : ''
-        } ${isPlayable ? 'is-playable' : ''} ${hasAegis ? 'has-aegis' : ''} ${isFrozen ? 'is-frozen' : ''}`}
+        } ${isPlayable ? 'is-playable' : ''} ${hasAegis ? 'has-aegis' : ''} ${isFrozen ? 'is-frozen' : ''} ${isExhausted ? 'is-exhausted opacity-75' : ''}`}
         data-id={card.id}
         data-element={card.element}
         data-rarity={card.rarity}
@@ -138,11 +137,11 @@ export function Card({
         data-foil-style={equippedFoilStyle}
         style={
           {
-            '--card-rx': `${rx.toFixed(2)}deg`,
-            '--card-ry': `${ry.toFixed(2)}deg`,
-            '--pointer-x': `${px.toFixed(1)}%`,
-            '--pointer-y': `${py.toFixed(1)}%`,
-            '--card-opacity': opacity
+            '--card-rx': '0deg',
+            '--card-ry': '0deg',
+            '--pointer-x': '50%',
+            '--pointer-y': '50%',
+            '--card-opacity': 0
           } as React.CSSProperties
         }
         onMouseMove={handleMouseMove}
@@ -160,7 +159,7 @@ export function Card({
           else if (onInspect) onInspect(card);
         }}
       >
-        <div className="card-inner">
+        <div className="card-inner pointer-events-none">
           {/* Holographic foil & glare dynamic shaders */}
           <div className={`card-foil foil-${equippedFoilStyle}`} />
           <div className="card-glare" />
@@ -183,7 +182,7 @@ export function Card({
             {onInspect && (
               <button
                 type="button"
-                className="card-inspect-btn"
+                className="card-inspect-btn pointer-events-auto"
                 title="Inspect Card & Lore (Right-Click / 🔍)"
                 onClick={e => {
                   e.stopPropagation();
@@ -216,11 +215,17 @@ export function Card({
               {card.element} {card.type}
             </div>
 
-            {isFrozen && (
+            {isFrozen ? (
               <div className="absolute inset-0 bg-cyan-500/30 backdrop-blur-[1px] flex items-center justify-center pointer-events-none z-20">
                 <span className="text-xl font-bold drop-shadow">❄️</span>
               </div>
-            )}
+            ) : isExhausted ? (
+              <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-[0.5px] flex items-center justify-center pointer-events-none z-20">
+                <div className="bg-slate-950/90 border border-slate-700/80 px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-mono font-bold text-slate-300 tracking-wider uppercase shadow">
+                  💤 EXHAUSTED
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Ability / Rules Box */}
@@ -265,3 +270,6 @@ export function Card({
     </div>
   );
 }
+
+export const Card = React.memo(CardBase);
+

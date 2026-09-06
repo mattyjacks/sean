@@ -4,8 +4,11 @@ import {
   activateHeroPower,
   declareAttack,
   endTurn,
+  drawCardTurn,
+  advancePhase,
   calculateAscensionCost
 } from './gameEngine';
+import { tcgWorkerManager } from './tcgWorkerManager';
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -21,7 +24,13 @@ export async function executeAiTurn(
   try {
     await sleep(600);
 
-    // Phase 1: Play Cards & In-Place Ascensions
+    // Phase 1: Draw Phase
+    if (getGameState().phase === 'draw') {
+      updateGameState(s => drawCardTurn(s));
+      await sleep(600);
+    }
+
+    // Phase 2: Main Phase - Play Cards & Ascensions
     let keepPlaying = true;
     let iterations = 0;
 
@@ -32,6 +41,17 @@ export async function executeAiTurn(
       if (state.winner || state.currentTurn !== 2) return;
 
       const ai = state.players[1];
+
+      // 0. Play Champion Card into Dedicated Champion Lane if available
+      if (ai.championLane === null) {
+        const champCard = ai.hand.find(c => c.id.includes('_champion') || c.desc?.includes('Dedicated Champion Lane'));
+        if (champCard && champCard.cost <= ai.mana) {
+          updateGameState(s => playCard(s, champCard.instanceId, 'champion'));
+          keepPlaying = true;
+          await sleep(650);
+          continue;
+        }
+      }
 
       // 1. Look for In-Place Ascension combos
       for (let laneIdx = 0; laneIdx < ai.board.length; laneIdx++) {
@@ -93,7 +113,7 @@ export async function executeAiTurn(
       }
     }
 
-    // Phase 2: Hero Power
+    // Hero Power in Main Phase
     const stateAfterSummons = getGameState();
     if (stateAfterSummons.winner || stateAfterSummons.currentTurn !== 2) return;
     const aiPlayer = stateAfterSummons.players[1];
@@ -103,52 +123,104 @@ export async function executeAiTurn(
       await sleep(550);
     }
 
-    // Phase 3: Declare Attacks
+    // Transition from Main to Combat Phase
+    if (getGameState().phase === 'main') {
+      updateGameState(s => advancePhase(s));
+      await sleep(600);
+    }
+
+    // Phase 3: Combat Phase - Declare Attacks (Optimized via Web Worker)
     const stateBeforeCombat = getGameState();
     if (stateBeforeCombat.winner || stateBeforeCombat.currentTurn !== 2) return;
 
-    const readyAttackers = (getGameState().players[1].board.filter(
-      (c): c is CardInstance => !!c && c.canAttack && !c.hasAttackedThisTurn && !c.frozen
-    ) as CardInstance[]);
+    // Run decision tree off-thread via Web Worker
+    interface RecommendedAttack {
+      attackerInstanceId: string;
+      targetType: 'champion' | 'vanguard' | 'creature' | 'champion_lane';
+      targetLane: number | null;
+      priority: number;
+      reason: string;
+    }
 
-    for (const attacker of readyAttackers) {
-      const currentState = getGameState();
-      if (currentState.winner || currentState.currentTurn !== 2) break;
+    let workerRecommendations: RecommendedAttack[] = [];
+    try {
+      const workerRes = await tcgWorkerManager.runTask<{ recommendedAttacks: RecommendedAttack[] }>('COMPUTE_AI_ACTIONS', {
+        gameState: stateBeforeCombat,
+        iterations: 150
+      });
+      if (workerRes.success && workerRes.data?.recommendedAttacks) {
+        workerRecommendations = workerRes.data.recommendedAttacks;
+      }
+    } catch {
+      workerRecommendations = [];
+    }
 
-      const liveAttacker = currentState.players[1].board.find(
-        c => c && c.instanceId === attacker.instanceId && c.canAttack && !c.hasAttackedThisTurn && !c.frozen
-      );
-      if (!liveAttacker) continue;
+    if (workerRecommendations.length > 0) {
+      for (const rec of workerRecommendations) {
+        const currentState = getGameState();
+        if (currentState.winner || currentState.currentTurn !== 2) break;
 
-      const opp = currentState.players[0];
-      const tauntBlockers = opp.board
-        .map((c, idx) => ({ card: c, lane: idx }))
-        .filter(entry => entry.card && entry.card.hasTaunt);
+        const liveAttacker = [
+          ...currentState.players[1].board.filter((c): c is CardInstance => !!c),
+          ...(currentState.players[1].championLane ? [currentState.players[1].championLane] : [])
+        ].find(
+          c => c.instanceId === rec.attackerInstanceId && c.canAttack && !c.hasAttackedThisTurn && !c.frozen
+        );
 
-      if (tauntBlockers.length > 0) {
-        // Attack Taunt guardian
-        const target = tauntBlockers[0];
-        updateGameState(s => declareAttack(s, attacker.instanceId, 'creature', target.lane));
+        if (!liveAttacker) continue;
+
+        updateGameState(s =>
+          declareAttack(s, rec.attackerInstanceId, rec.targetType, rec.targetLane)
+        );
         await sleep(700);
-        continue;
+      }
+    } else {
+      // Fallback local heuristic
+      const boardAttackers = getGameState().players[1].board.filter(
+        (c): c is CardInstance => !!c && c.canAttack && !c.hasAttackedThisTurn && !c.frozen
+      );
+      const champLaneAttacker = getGameState().players[1].championLane;
+      const readyAttackers: CardInstance[] = [...boardAttackers];
+      if (champLaneAttacker && champLaneAttacker.canAttack && !champLaneAttacker.hasAttackedThisTurn && !champLaneAttacker.frozen) {
+        readyAttackers.push(champLaneAttacker);
       }
 
-      // If no Taunt, check favorable trades
-      const enemyUnits = opp.board
-        .map((c, idx) => ({ card: c, lane: idx }))
-        .filter(entry => entry.card !== null);
+      for (const attacker of readyAttackers) {
+        const currentState = getGameState();
+        if (currentState.winner || currentState.currentTurn !== 2) break;
 
-      const killableHighThreat = enemyUnits.find(
-        e => e.card!.currentHp <= attacker.currentAtk && e.card!.currentAtk >= 3
-      );
+        const liveAttacker = currentState.players[1].board.find(
+          c => c && c.instanceId === attacker.instanceId && c.canAttack && !c.hasAttackedThisTurn && !c.frozen
+        );
+        if (!liveAttacker) continue;
 
-      if (killableHighThreat) {
-        updateGameState(s => declareAttack(s, attacker.instanceId, 'creature', killableHighThreat.lane));
-        await sleep(700);
-      } else {
-        // Direct attack to enemy Vanguard
-        updateGameState(s => declareAttack(s, attacker.instanceId, 'vanguard', null));
-        await sleep(700);
+        const opp = currentState.players[0];
+        const tauntBlockers = opp.board
+          .map((c, idx) => ({ card: c, lane: idx }))
+          .filter(entry => entry.card && entry.card.hasTaunt);
+
+        if (tauntBlockers.length > 0) {
+          const target = tauntBlockers[0];
+          updateGameState(s => declareAttack(s, attacker.instanceId, 'creature', target.lane));
+          await sleep(700);
+          continue;
+        }
+
+        const enemyUnits = opp.board
+          .map((c, idx) => ({ card: c, lane: idx }))
+          .filter(entry => entry.card !== null);
+
+        const killableHighThreat = enemyUnits.find(
+          e => e.card!.currentHp <= attacker.currentAtk && e.card!.currentAtk >= 3
+        );
+
+        if (killableHighThreat) {
+          updateGameState(s => declareAttack(s, attacker.instanceId, 'creature', killableHighThreat.lane));
+          await sleep(700);
+        } else {
+          updateGameState(s => declareAttack(s, attacker.instanceId, 'vanguard', null));
+          await sleep(700);
+        }
       }
     }
 
